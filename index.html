@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TIAL — Смотрим вместе</title>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/piesocket-js@3.0/dist/piesocket.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0b0b10;--surface:#13131c;--surface2:#1a1a27;--surface3:#22223a;
+      --border:#2c2c45;--accent:#e63946;--accent2:#ff6b6b;--blue:#74b9ff;
+      --text:#e8e8f2;--muted:#6b6b8f;--chat-w:320px;
+    }
+    body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+    /* ── HEADER ── */
+    header{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;gap:10px}
+
+    /* LOGO ТИАЛ */
+    .logo{font-family:'Oswald',sans-serif;font-size:26px;letter-spacing:0px;white-space:nowrap;line-height:1;user-select:none}
+    .logo .ti{color:var(--accent);text-shadow:0 0 16px rgba(230,57,70,.5)}
+    .logo .al{color:var(--blue);text-shadow:0 0 16px rgba(116,185,255,.4)}
+
+    .header-center{flex:1;max-width:400px;position:relative}
+    .search-wrap{display:flex;gap:6px}
+    .search-wrap input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 12px;font-size:13px;font-family:inherit;outline:none;transition:border-color .2s}
+    .search-wrap input:focus{border-color:var(--accent)}
+    .search-wrap input::placeholder{color:var(--muted)}
+    .search-wrap button{background:var(--accent);border:none;border-radius:8px;color:#fff;font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:0.3px;padding:0 13px;cursor:pointer;transition:background .2s;white-space:nowrap}
+    .search-wrap button:hover{background:var(--accent2)}
+    #search-results{position:absolute;top:calc(100% + 5px);left:0;right:0;background:var(--surface2);border:1px solid var(--border);border-radius:10px;z-index:200;max-height:300px;overflow-y:auto;display:none;box-shadow:0 12px 40px rgba(0,0,0,.7)}
+    #search-results::-webkit-scrollbar{width:4px}
+    #search-results::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    .sr-item{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;transition:background .15s;border-bottom:1px solid var(--border)}
+    .sr-item:last-child{border-bottom:none}
+    .sr-item:hover{background:var(--surface3)}
+    .sr-poster{width:34px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;background:var(--surface3)}
+    .sr-info{flex:1;min-width:0}
+    .sr-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sr-meta{font-size:11px;color:var(--muted);margin-top:2px}
+
+    .room-info{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);white-space:nowrap}
+    .room-id-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:7px}
+    .room-id-box strong{color:var(--text);font-size:12px}
+    .copy-btn{background:none;border:none;color:var(--accent2);cursor:pointer;font-size:11px;font-family:inherit;font-weight:800;padding:0}
+    .copy-btn:hover{opacity:.7}
+    .viewers-mini{display:flex;align-items:center;gap:5px}
+    .dot{width:7px;height:7px;border-radius:50%;background:#2ecc71;animation:pulse 2s infinite;flex-shrink:0}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+    /* ── MAIN ── */
+    .main{display:flex;flex:1;overflow:hidden}
+
+    /* ── PLAYER ── */
+    .player-side{flex:1;display:flex;flex-direction:column;background:#000;min-width:0}
+    .player-wrap{flex:1;position:relative;background:#000;overflow:hidden}
+    #player-iframe{width:100%;height:100%;border:none;position:absolute;inset:0;display:none}
+
+    /* placeholder */
+    .placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--muted);text-align:center;padding:40px}
+    .placeholder-icon{font-size:56px;opacity:.2}
+    .placeholder h2{font-family:'Oswald',sans-serif;font-size:24px;letter-spacing:0.5px;color:var(--text)}
+    .placeholder p{font-size:13px;max-width:320px;line-height:1.7}
+    .hint-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:12px;display:inline-flex;align-items:center;gap:7px}
+
+    /* overlay: только значок синхронизации — НЕ перекрывает плеер */
+    #sync-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(230,57,70,.92);color:#fff;font-size:11px;font-weight:800;padding:4px 14px;border-radius:20px;display:none;pointer-events:none;white-space:nowrap;z-index:5}
+
+    /* кнопка синхронизации — маленькая, в левом верхнем углу плеера */
+    #sync-now-btn{
+      position:absolute;top:10px;left:10px;z-index:5;
+      background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.15);
+      border-radius:7px;color:rgba(255,255,255,.85);cursor:pointer;
+      padding:5px 10px;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:0.3px;
+      display:none;align-items:center;gap:5px;
+      backdrop-filter:blur(6px);
+      transition:background .2s,opacity .2s;
+      opacity:0;
+    }
+    #sync-now-btn:hover{background:rgba(230,57,70,.7)}
+    #sync-now-btn:active{opacity:.7}
+    .player-wrap:hover #sync-now-btn{display:flex;opacity:1}
+
+    /* кнопки управления — вне плеера, под ним */
+    .sync-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    .sc-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);cursor:pointer;padding:5px 12px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.3px;transition:background .15s,border-color .15s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+    .sc-btn:hover{background:var(--surface3);border-color:var(--accent)}
+    .sc-btn:active{opacity:.7}
+    .sc-btn.red{background:rgba(230,57,70,.15);border-color:rgba(230,57,70,.4);color:var(--accent2)}
+    .sc-btn.red:hover{background:rgba(230,57,70,.25)}
+    .sc-time{font-size:12px;color:var(--muted);font-weight:700;font-family:monospace}
+
+    /* bottom bar под плеером */
+    #bottom-bar{background:var(--surface);border-top:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column}
+    #controls-row{padding:6px 12px;display:flex;align-items:center;gap:8px;min-height:36px}
+
+    /* now playing */
+    #now-playing{padding:6px 12px;display:none;align-items:center;gap:9px;border-top:1px solid var(--border)}
+    .np-poster{width:26px;height:38px;object-fit:cover;border-radius:3px;flex-shrink:0}
+    .np-title{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+    .np-year{font-size:11px;color:var(--muted);white-space:nowrap}
+
+    /* ── CHAT SIDE ── */
+    .chat-side{width:var(--chat-w);flex-shrink:0;display:flex;flex-direction:column;background:var(--surface);border-left:1px solid var(--border)}
+
+    /* viewers panel */
+    #viewers-panel{border-bottom:1px solid var(--border);flex-shrink:0}
+    .vp-header{padding:8px 12px;font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:0.5px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+    .vp-header:hover{color:var(--text)}
+    .vp-header svg{color:var(--accent)}
+    #viewers-list{padding:0 8px 8px}
+    .viewer-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px}
+    .viewer-row:hover{background:var(--surface2)}
+    .viewer-avatar{width:28px;height:28px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;border:2px solid var(--border)}
+    .viewer-avatar.me{border-color:var(--accent)}
+    .viewer-avatar.other{border-color:var(--blue)}
+    .viewer-name{font-size:12px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .viewer-name.me{color:var(--accent)}
+    .viewer-name.other{color:var(--blue)}
+    .viewer-time{font-size:11px;color:var(--muted);font-weight:700;font-family:monospace;white-space:nowrap}
+    .viewer-status{width:7px;height:7px;border-radius:50%;background:#2ecc71;flex-shrink:0}
+
+    .chat-header{padding:10px 12px;font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:0.5px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px;color:var(--text);flex-shrink:0}
+    .chat-header svg{color:var(--accent)}
+    .messages{flex:1;overflow-y:auto;padding:9px;display:flex;flex-direction:column;gap:6px;scroll-behavior:smooth}
+    .messages::-webkit-scrollbar{width:3px}
+    .messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    .msg{display:flex;flex-direction:column;gap:2px;animation:fadeUp .2s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .msg.system{align-items:center}
+    .msg.system .bubble{background:transparent;color:var(--muted);font-size:11px;font-style:italic;padding:1px 0;border:none}
+    .msg-meta{display:flex;align-items:baseline;gap:5px}
+    .msg-name{font-weight:800;font-size:11px;color:var(--accent2)}
+    .msg-name.other{color:var(--blue)}
+    .msg-time{font-size:10px;color:var(--muted)}
+    .bubble{background:var(--surface2);border-radius:0 9px 9px 9px;padding:6px 10px;font-size:12.5px;line-height:1.5;max-width:100%;word-break:break-word;border:1px solid var(--border)}
+    .msg.own{align-items:flex-end}
+    .msg.own .bubble{border-radius:9px 0 9px 9px;background:rgba(230,57,70,.13);border-color:rgba(230,57,70,.26)}
+    .msg.own .msg-name{color:var(--accent)}
+    .chat-input-area{padding:8px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0}
+    .chat-input-area input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;transition:border-color .2s}
+    .chat-input-area input:focus{border-color:var(--accent)}
+    .chat-input-area input::placeholder{color:var(--muted)}
+    .send-btn{background:var(--accent);border:none;border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;flex-shrink:0}
+    .send-btn:hover{background:var(--accent2)}
+
+    /* ── OVERLAY ── */
+    #overlay{position:fixed;inset:0;background:rgba(8,8,14,.97);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(10px)}
+    .join-box{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:40px;width:390px;display:flex;flex-direction:column;gap:22px;box-shadow:0 40px 80px rgba(0,0,0,.8)}
+    .join-logo{font-family:'Oswald',sans-serif;font-size:48px;letter-spacing:0.3px;text-align:center;line-height:1}
+    .join-logo .ti{color:var(--accent);text-shadow:0 0 30px rgba(230,57,70,.5)}
+    .join-logo .al{color:var(--blue);text-shadow:0 0 30px rgba(116,185,255,.4)}
+    .join-sub{text-align:center;color:var(--muted);font-size:13px;margin-top:-10px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px}
+    .field input{background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px 16px;font-size:14px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+    .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(230,57,70,.12)}
+    .field input::placeholder{color:var(--muted)}
+    .divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+    .join-btns{display:flex;flex-direction:column;gap:9px}
+    .btn-primary{background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:'Oswald',sans-serif;font-size:20px;letter-spacing:0.5px;padding:13px;cursor:pointer;transition:background .2s,box-shadow .2s}
+    .btn-primary:hover{background:var(--accent2);box-shadow:0 8px 24px rgba(230,57,70,.3)}
+    .btn-secondary{background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Oswald',sans-serif;font-size:20px;letter-spacing:0.5px;padding:13px;cursor:pointer;transition:border-color .2s}
+    .btn-secondary:hover{border-color:var(--accent)}
+
+    /* notif */
+    #notif{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 18px;font-size:12px;color:var(--text);z-index:2000;transition:transform .3s ease;white-space:nowrap;pointer-events:none}
+    #notif.show{transform:translateX(-50%) translateY(0)}
+
+    @media(max-width:700px){
+      :root{--chat-w:100%}
+      .main{flex-direction:column}
+      .chat-side{width:100%;height:260px;border-left:none;border-top:1px solid var(--border)}
+      .header-center{display:none}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ JOIN OVERLAY ═══ -->
+<div id="overlay">
+  <div class="join-box">
+    <div class="join-logo"><span class="ti">TI</span><span class="al">AL</span></div>
+    <div class="join-sub">Смотрите фильмы вместе с друзьями онлайн</div>
+    <div class="field">
+      <label>Твоё имя</label>
+      <input id="inp-name" type="text" placeholder="Например: Антон" maxlength="20"/>
+    </div>
+    <div class="join-btns">
+      <button class="btn-primary" onclick="createRoom()">🎬 Создать комнату</button>
+      <div class="divider">или войти в существующую</div>
+      <div class="field">
+        <input id="inp-room" type="text" placeholder="Код комнаты от друга" maxlength="8"/>
+      </div>
+      <button class="btn-secondary" onclick="joinRoom()">➜ Войти в комнату</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ HEADER ═══ -->
+<header>
+  <div class="logo"><span class="ti">TI</span><span class="al">AL</span></div>
+
+  <div class="header-center">
+    <div class="search-wrap">
+      <input id="search-input" type="text" placeholder="🔍 Найти фильм или сериал..." onkeydown="if(event.key==='Enter') searchMovie()"/>
+      <button onclick="searchMovie()">НАЙТИ</button>
+    </div>
+    <div id="search-results"></div>
+  </div>
+
+  <div class="room-info">
+    <div class="viewers-mini"><div class="dot"></div><span id="viewer-count">1 зритель</span></div>
+    <div class="room-id-box">
+      <span>Код: <strong id="room-display">—</strong></span>
+      <button class="copy-btn" onclick="copyRoom()">Копировать</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+
+  <!-- PLAYER -->
+  <div class="player-side">
+    <div class="player-wrap" id="player-wrap">
+
+      <div class="placeholder" id="placeholder">
+        <div class="placeholder-icon">🎬</div>
+        <h2>Выберите фильм</h2>
+        <p>Найдите фильм через поиск вверху — по-русски или по-английски</p>
+        <div class="hint-box">💡 Миллионы фильмов и сериалов в базе</div>
+      </div>
+
+      <iframe id="player-iframe" allowfullscreen allow="autoplay; fullscreen; encrypted-media"></iframe>
+
+      <!-- overlay: badge + sync btn + bottom controls -->
+      <!-- только значок синхронизации поверх плеера -->
+      <div id="sync-badge">⟳ Синхронизация...</div>
+      <button id="sync-now-btn" onclick="forceSyncNow()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Синхр.
+      </button>
+    </div>
+
+    <!-- ПАНЕЛЬ ПОД ПЛЕЕРОМ: кнопки + озвучки + now playing -->
+    <div id="bottom-bar">
+      <!-- строка управления -->
+      <div id="controls-row">
+        <div class="sync-controls" id="sync-controls" style="display:none">
+          <button class="sc-btn red" onclick="syncCmd('play')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>PLAY
+          </button>
+          <button class="sc-btn" onclick="syncCmd('pause')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>ПАУЗА
+          </button>
+          <button class="sc-btn" onclick="promptSeek()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>ПЕРЕМОТКА
+          </button>
+          <span class="sc-time" id="sc-time-label"></span>
+        </div>
+      </div>
+</div>
+
+      <!-- ОЗВУЧКИ -->
+    <div id="voice-bar" style="display:none">
+      <span class="voice-label">🎙 Плеер:</span>
+      <div id="voice-btns"></div>
+    </div>
+
+    <!-- NOW PLAYING -->
+      <div id="now-playing" style="display:none">
+        <img id="np-poster" class="np-poster" src="" alt=""/>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px">
+          <div class="np-title" id="np-title"></div>
+          <div class="np-year" id="np-year"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT SIDE -->
+  <div class="chat-side">
+
+    <!-- VIEWERS PANEL -->
+    <div id="viewers-panel">
+      <div class="vp-header" onclick="toggleViewers()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        УЧАСТНИКИ <span id="vp-count" style="color:var(--accent);margin-left:4px">1</span>
+        <svg id="vp-arrow" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:auto;transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div id="viewers-list"></div>
+    </div>
+
+    <div class="chat-header">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      ЧАТ
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="chat-input-area">
+      <input id="chat-input" type="text" placeholder="Написать..." maxlength="300" onkeydown="if(event.key==='Enter') sendMessage()"/>
+      <button class="send-btn" onclick="sendMessage()">
+        <svg width="15" height="15" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="notif"></div>
+
+<script>
+/* ═══ CONFIG ═══ */
+const PIESOCKET_API_KEY = 'W7ekjd4DUXNlhsQzrEM0wNxr2g4SA6XLizueGwS0';
+const PIESOCKET_CLUSTER = 'free.blr2';
+const TMDB_KEY = 'd91438da2171127b0545d5e6cd01f219';
+// ↓ Сюда вставь URL своего Cloudflare Worker после деплоя
+const WORKER_URL = 'https://lucky-hall-ebc2.redfool555.workers.dev';
+
+/* ═══ STATE ═══ */
+let myName='', roomId='', psChannel=null;
+let myId = Math.random().toString(36).slice(2,10);
+let isSyncing = false;
+let currentImdbId = null;
+let currentKpId = '';
+let lastKnownTime = 0;   // последнее известное время плеера (из timeupdate)
+let viewersOpen = true;
+
+// Список участников: { id, name, time, isMe }
+let viewers = {};
+
+/* ═══ HELPERS ═══ */
+function randId(n=6){ return Math.random().toString(36).slice(2,2+n).toUpperCase(); }
+function nowStr(){ return new Date().toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtTime(s){ s=Math.floor(s||0); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0?`${h}:${pad(m)}:${pad(sec)}`:`${m}:${pad(sec)}`; }
+function pad(n){ return n<10?'0'+n:n; }
+function showNotif(txt){ const n=document.getElementById('notif'); n.textContent=txt; n.classList.add('show'); setTimeout(()=>n.classList.remove('show'),2500); }
+
+/* ═══ OVERLAY ═══ */
+function createRoom(){
+  const name=document.getElementById('inp-name').value.trim();
+  if(!name){alert('Введи своё имя');return;}
+  myName=name; roomId=randId(6); enterRoom();
+}
+function joinRoom(){
+  const name=document.getElementById('inp-name').value.trim();
+  const code=document.getElementById('inp-room').value.trim().toUpperCase();
+  if(!name){alert('Введи своё имя');return;}
+  if(!code){alert('Введи код комнаты');return;}
+  myName=name; roomId=code; enterRoom();
+}
+function enterRoom(){
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('room-display').textContent=roomId;
+  document.title=`TIAL · ${roomId}`;
+  history.replaceState(null,'',`?room=${roomId}`);
+  // Добавляем себя в список зрителей
+  viewers[myId]={id:myId, name:myName, time:0, isMe:true};
+  renderViewers();
+  connectWS();
+  // Периодически рассылаем своё текущее время
+  setInterval(broadcastTime, 2000);
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  const r=new URLSearchParams(location.search).get('room');
+  if(r) document.getElementById('inp-room').value=r.toUpperCase();
+});
+
+/* ═══ PIESOCKET ═══ */
+function connectWS(){
+  const ps=new PieSocket({clusterId:PIESOCKET_CLUSTER,apiKey:PIESOCKET_API_KEY,notifySelf:false});
+  ps.subscribe(roomId).then(ch=>{
+    psChannel=ch;
+    addSystemMsg('✓ Подключено к комнате '+roomId);
+    sendWS({type:'join', name:myName, id:myId});
+    ch.listen('*',(event,data)=>{
+      if(event.startsWith('system:')) return;
+      try{ handleMsg(typeof data==='string'?JSON.parse(data):data); }catch(_){}
+    });
+  }).catch(()=>addSystemMsg('⚠ Ошибка подключения'));
+}
+function sendWS(data){
+  data.sender=myId;
+  if(psChannel) psChannel.publish('message',data);
+}
+
+/* ═══ INCOMING ═══ */
+function handleMsg(d){
+  if(d.sender===myId) return;
+
+  if(d.type==='join'){
+    addSystemMsg(`👤 ${d.name} зашёл в комнату`);
+    viewers[d.sender]={id:d.sender, name:d.name, time:0, isMe:false};
+    renderViewers();
+    // Ответим им своим состоянием (чтобы они увидели нас и текущий фильм)
+    sendWS({type:'hello', name:myName, id:myId, imdbId:currentImdbId, time:lastKnownTime});
+  }
+  if(d.type==='hello'){
+    viewers[d.sender]={id:d.sender, name:d.name, time:d.time||0, isMe:false};
+    renderViewers();
+    // Если у нас ещё нет фильма, а у пришедшего есть — не грузим автоматически
+  }
+  if(d.type==='leave'){
+    addSystemMsg(`👤 ${d.name} покинул комнату`);
+    delete viewers[d.sender];
+    renderViewers();
+  }
+  if(d.type==='chat') addMsg(d.name,d.text,false);
+
+  if(d.type==='load-movie'){
+    applyMovie(d.imdbId, d.kpId||'', d.title, d.year, d.poster);
+    addSystemMsg(`🎬 ${d.name} включил: ${d.title}`);
+  }
+  if(d.type==='player-cmd'){
+    showSyncBadge();
+    isSyncing=true;
+    if(d.cmd==='server') { 
+      currentPlayerIdx=d.value;
+      if(currentImdbId) loadPlayer(currentImdbId, d.value);
+      renderVoiceBar();
+      isSyncing=false; return; 
+    }
+    if(d.cmd==='play')  { startLocalTimer(); sendToPlayer('play'); }
+    if(d.cmd==='pause') { stopLocalTimer();  sendToPlayer('pause'); }
+    if(d.cmd==='seek')  { setLocalTime(d.value??0); sendToPlayer('seek',d.value); }
+    setTimeout(()=>isSyncing=false,400);
+  }
+  // Принудительная синхронизация от хоста
+  if(d.type==='sync-force'){
+    showSyncBadge();
+    isSyncing=true;
+    setLocalTime(d.time||0);
+    sendToPlayer('seek',d.time||0);
+    if(d.playing) setTimeout(()=>{startLocalTimer();sendToPlayer('play');},400);
+    else stopLocalTimer();
+    addSystemMsg('🔄 '+d.name+' синхронизировал плеер — '+fmtTime(d.time||0));
+    setTimeout(()=>isSyncing=false,600);
+  }
+  // Обновляем время у конкретного участника
+  if(d.type==='timeping'){
+    if(viewers[d.sender]){
+      viewers[d.sender].time=d.time||0;
+      renderViewers();
+    } else {
+      viewers[d.sender]={id:d.sender, name:d.name, time:d.time||0, isMe:false};
+      renderViewers();
+    }
+  }
+}
+
+/* ═══ VIEWERS PANEL ═══ */
+function toggleViewers(){
+  viewersOpen=!viewersOpen;
+  document.getElementById('viewers-list').style.display=viewersOpen?'block':'none';
+  document.getElementById('vp-arrow').style.transform=viewersOpen?'rotate(0)':'rotate(-90deg)';
+}
+
+function renderViewers(){
+  const list=document.getElementById('viewers-list');
+  const ids=Object.keys(viewers);
+  document.getElementById('vp-count').textContent=ids.length;
+  document.getElementById('viewer-count').textContent=ids.length+' '+(ids.length===1?'зритель':ids.length<5?'зрителя':'зрителей');
+
+  list.innerHTML='';
+  ids.forEach(id=>{
+    const v=viewers[id];
+    const row=document.createElement('div');
+    row.className='viewer-row';
+    const initial=v.name.charAt(0).toUpperCase();
+    row.innerHTML=`
+      <div class="viewer-avatar ${v.isMe?'me':'other'}">${initial}</div>
+      <div class="viewer-name ${v.isMe?'me':'other'}">${esc(v.name)}${v.isMe?' (ты)':''}</div>
+      <div class="viewer-status"></div>
+      <div class="viewer-time">${fmtTime(v.time)}</div>`;
+    list.appendChild(row);
+  });
+}
+
+// Каждые 2 сек рассылаем своё время
+function broadcastTime(){
+  sendWS({type:'timeping', name:myName, id:myId, time:lastKnownTime});
+  // Обновляем своё время в панели
+  if(viewers[myId]){
+    viewers[myId].time=lastKnownTime;
+    renderViewers();
+  }
+}
+
+/* ═══ MOVIE SEARCH ═══ */
+async function searchMovie(){
+  const q=document.getElementById('search-input').value.trim();
+  if(!q) return;
+  const res=document.getElementById('search-results');
+  res.style.display='block';
+  res.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Ищем...</div>';
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&language=ru-RU&page=1`);
+    const data=await r.json();
+    const items=(data.results||[]).filter(x=>x.media_type==='movie'||x.media_type==='tv').slice(0,8);
+    if(!items.length){ res.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Ничего не найдено</div>'; return; }
+    res.innerHTML='';
+    items.forEach(item=>{
+      const title=item.title||item.name||'';
+      const year=(item.release_date||item.first_air_date||'').slice(0,4);
+      const poster=item.poster_path?`https://image.tmdb.org/t/p/w92${item.poster_path}`:'';
+      const div=document.createElement('div');
+      div.className='sr-item';
+      div.innerHTML=`<img class="sr-poster" src="${poster}" onerror="this.style.display='none'" alt=""/>
+        <div class="sr-info"><div class="sr-title">${esc(title)}</div>
+        <div class="sr-meta">${year} · ${item.media_type==='movie'?'Фильм':'Сериал'}</div></div>`;
+      div.onclick=()=>selectMovie(item);
+      res.appendChild(div);
+    });
+  }catch(e){
+    res.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">Ошибка поиска</div>';
+  }
+}
+document.addEventListener('click',e=>{
+  if(!document.getElementById('search-input').contains(e.target)&&!document.getElementById('search-results').contains(e.target))
+    document.getElementById('search-results').style.display='none';
+});
+
+async function selectMovie(item){
+  document.getElementById('search-results').style.display='none';
+  document.getElementById('search-input').value='';
+  const type=item.media_type==='movie'?'movie':'tv';
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/${type}/${item.id}/external_ids?api_key=${TMDB_KEY}`);
+    const ids=await r.json();
+    const imdbId=ids.imdb_id;
+    const kpId=ids.wikidata_id ? '' : (String(item.id)); // tmdb id as fallback
+    // Try to get KP ID from external_ids (TMDB returns it as 'kinopoisk' field)
+    const kpIdReal = ids.kinopoisk_id || ids.kp_id || '';
+    if(!imdbId && !kpIdReal){ addSystemMsg('⚠ Нет IMDb ID для этого фильма'); return; }
+    const title=item.title||item.name||'';
+    const year=(item.release_date||item.first_air_date||'').slice(0,4);
+    const poster=item.poster_path?`https://image.tmdb.org/t/p/w92${item.poster_path}`:'';
+    applyMovie(imdbId, kpIdReal, title, year, poster);
+    sendWS({type:'load-movie', name:myName, imdbId, kpId:kpIdReal, title, year, poster});
+    addSystemMsg(`🎬 Ты включил: ${title}`);
+  }catch(e){ addSystemMsg('⚠ Ошибка при загрузке фильма'); }
+}
+
+/* ═══ APPLY MOVIE ═══ */
+// Плееры — загружаются по API, возвращают iframe_url с реальными озвучками
+// Используем те же публичные токены что и все кино-сайты
+const PLAYER_APIS = [
+  { label: 'Alloha',       key: 'alloha' },
+  { label: 'Kodik',        key: 'kodik' },
+  { label: 'VideoCDN',     key: 'videocdn' },
+  { label: 'Collaps',      key: 'collaps' },
+  { label: 'EmbedMaster',  key: 'embedmaster' },
+];
+let currentPlayerIdx = 4; // EmbedMaster по умолчанию пока не настроен воркер
+let cachedPlayerData = null; // кэш ответа воркера для текущего фильма
+
+
+
+// Собственный таймер — считаем время сами, т.к. iframe не даёт читать состояние
+let localTimer = null;
+let isPlaying = false;
+let playStartedAt = 0;   // Date.now() когда нажали play
+let timeAtPlay = 0;      // lastKnownTime в момент нажатия play
+
+function startLocalTimer(){
+  stopLocalTimer();
+  isPlaying = true;
+  playStartedAt = Date.now();
+  timeAtPlay = lastKnownTime;
+  localTimer = setInterval(()=>{
+    if(!isPlaying) return;
+    const elapsed = (Date.now() - playStartedAt) / 1000;
+    updateTime(timeAtPlay + elapsed);
+  }, 500);
+}
+function stopLocalTimer(){
+  isPlaying = false;
+  if(localTimer){ clearInterval(localTimer); localTimer=null; }
+}
+function setLocalTime(sec){
+  lastKnownTime = sec;
+  timeAtPlay = sec;
+  playStartedAt = Date.now();
+  updateTime(sec);
+}
+
+function applyMovie(imdbId, kpId, title, year, poster){
+  currentImdbId = imdbId;
+  currentKpId = kpId || '';
+  lastKnownTime = 0;
+  stopLocalTimer();
+
+  document.getElementById('voice-bar').style.display='flex';
+  document.getElementById('now-playing').style.display='flex';
+  document.getElementById('np-title').textContent=title;
+  document.getElementById('np-year').textContent=year;
+  const npImg=document.getElementById('np-poster');
+  if(poster){npImg.src=poster;npImg.style.display='block';}else{npImg.style.display='none';}
+
+  loadPlayer(imdbId, 1);
+}
+
+async function fetchPlayers(imdbId, kpId){
+  try {
+    const params = new URLSearchParams();
+    if (imdbId) params.set('imdb', imdbId);
+    if (kpId)   params.set('kp', kpId);
+    const r = await fetch(`${WORKER_URL}?${params}`);
+    cachedPlayerData = await r.json();
+    renderVoiceBar(); // обновляем кнопки — теперь знаем что доступно
+    // Если Alloha доступна — переключаем на неё автоматически
+    if (cachedPlayerData.alloha) {
+      currentPlayerIdx = 0;
+      renderVoiceBar();
+      const iframe = document.getElementById('player-iframe');
+      iframe.src = cachedPlayerData.alloha;
+    }
+  } catch(e) {
+    console.warn('Worker недоступен:', e);
+  }
+}
+
+function loadPlayer(imdbId, playerIdx){
+  let url = `https://embedmaster.link/movie/${imdbId}`; // fallback
+
+  if (cachedPlayerData) {
+    const key = PLAYER_APIS[playerIdx]?.key;
+    if (key === 'kodik' && Array.isArray(cachedPlayerData.kodik)) {
+      // Kodik — берём первую озвучку
+      url = cachedPlayerData.kodik[0]?.url || url;
+    } else if (cachedPlayerData[key]) {
+      url = cachedPlayerData[key];
+    }
+  }
+
+  const iframe=document.getElementById('player-iframe');
+  iframe.src=url;
+  iframe.style.display='block';
+  document.getElementById('placeholder').style.display='none';
+  document.getElementById('sync-controls').style.display='flex';
+  document.getElementById('controls-row').style.display='flex';
+  // Начинаем слушать postMessage от плеера
+  startTimePoll();
+}
+
+function renderVoiceBar(){
+  const bar=document.getElementById('voice-bar');
+  const btns=document.getElementById('voice-btns');
+  bar.style.display='flex';
+  btns.innerHTML='';
+  btns.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
+  PLAYER_APIS.forEach((p,i)=>{
+    const key = p.key;
+    const available = !cachedPlayerData || cachedPlayerData[key] ||
+                      (key==='kodik' && cachedPlayerData.kodik?.length);
+    const b=document.createElement('button');
+    b.className='voice-btn'+(i===currentPlayerIdx?' active':'')+(available?'':' disabled');
+    b.style.opacity = available ? '1' : '0.35';
+    b.textContent = p.label;
+    b.onclick=()=>{ if(available) switchServer(i); };
+    btns.appendChild(b);
+  });
+}
+
+function switchServer(idx){
+  if(!currentImdbId) return;
+  currentPlayerIdx=idx;
+  renderVoiceBar();
+  loadPlayer(currentImdbId, idx);
+  setLocalTime(lastKnownTime);
+  sendWS({type:'player-cmd',name:myName,cmd:'server',value:idx});
+  showNotif(`🎬 Плеер: ${PLAYER_APIS[idx]?.label||idx}`);
+}
+
+/* ═══ POSTMESSAGE → PLAYER ═══ */
+function sendToPlayer(command, value){
+  const iframe=document.getElementById('player-iframe');
+  if(!iframe||!iframe.contentWindow) return;
+  try{
+    iframe.contentWindow.postMessage({source:'embedmaster_player_command',command,value},'*');
+    iframe.contentWindow.postMessage(JSON.stringify({
+      context:'player.js',version:'0.0.11',method:command,value:value??''
+    }),'*');
+  }catch(_){}
+}
+
+/* ═══ ТАЙМИНГ ═══ */
+let pollInterval=null;
+function startTimePoll(){
+  if(pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(()=>{
+    const iframe=document.getElementById('player-iframe');
+    if(!iframe||!iframe.contentWindow) return;
+    try{
+      iframe.contentWindow.postMessage(JSON.stringify({
+        context:'player.js',version:'0.0.11',
+        method:'getCurrentTime',value:'',listener:'tl'
+      }),'*');
+    }catch(_){}
+  }, 1000);
+}
+
+function updateTime(sec){
+  if(typeof sec!=='number'||isNaN(sec)||sec<0) return;
+  lastKnownTime=sec;
+  document.getElementById('sc-time-label').textContent=fmtTime(sec);
+  if(viewers[myId]) viewers[myId].time=sec;
+}
+
+window.addEventListener('message',e=>{
+  if(!e.data) return;
+  let msg=e.data;
+  if(typeof msg==='string'){
+    try{msg=JSON.parse(msg);}catch(_){return;}
+  }
+
+  // PlayerJS формат
+  if(msg.context==='player.js'){
+    if((msg.event==='getCurrentTime'||msg.listener==='tl')&&msg.value!==undefined){
+      const t=parseFloat(msg.value);
+      if(t>0) updateTime(t); // плеер вернул реальное время — обновляем
+    }
+    if(msg.event==='timeupdate'&&msg.value!==undefined){
+      const v=msg.value;
+      const t=parseFloat(typeof v==='object'?(v.seconds??v.currentTime??0):v);
+      if(t>0) updateTime(t);
+    }
+    if(!isSyncing){
+      if(msg.event==='play'){
+        startLocalTimer();
+        sendWS({type:'player-cmd',name:myName,cmd:'play',value:lastKnownTime});
+      }
+      if(msg.event==='pause'){
+        stopLocalTimer();
+        sendWS({type:'player-cmd',name:myName,cmd:'pause',value:lastKnownTime});
+      }
+      if(msg.event==='seek'){
+        const sv=msg.value;
+        const t=parseFloat(typeof sv==='object'?(sv.seconds??sv.currentTime??0):sv);
+        setLocalTime(t);
+        sendWS({type:'player-cmd',name:myName,cmd:'seek',value:t});
+      }
+    }
+    return;
+  }
+
+  // EmbedMaster нативный формат
+  if(msg.source==='embedmaster_player'){
+    if(msg.event==='timeupdate'&&msg.info){
+      const t=parseFloat(msg.info.currentTime||msg.info.seconds||0);
+      if(t>0) updateTime(t);
+    }
+    if(!isSyncing){
+      if(msg.event==='play'){
+        startLocalTimer();
+        sendWS({type:'player-cmd',name:myName,cmd:'play',value:lastKnownTime});
+      }
+      if(msg.event==='pause'){
+        stopLocalTimer();
+        sendWS({type:'player-cmd',name:myName,cmd:'pause',value:lastKnownTime});
+      }
+      if(msg.event==='seek'&&msg.info?.currentTime!==undefined){
+        setLocalTime(msg.info.currentTime);
+        sendWS({type:'player-cmd',name:myName,cmd:'seek',value:msg.info.currentTime});
+      }
+    }
+  }
+});
+
+/* ═══ SYNC COMMANDS (нажатие кнопок вручную) ═══ */
+function syncCmd(cmd,value){
+  if(cmd==='play')  { startLocalTimer(); sendToPlayer('play'); }
+  if(cmd==='pause') { stopLocalTimer();  sendToPlayer('pause'); }
+  if(cmd==='seek')  { setLocalTime(value); sendToPlayer('seek',value); }
+  sendWS({type:'player-cmd',name:myName,cmd,value:value??lastKnownTime});
+  if(cmd==='play')  addSystemMsg('▶ '+myName+' запустил видео');
+  if(cmd==='pause') addSystemMsg('⏸ '+myName+' поставил на паузу');
+  if(cmd==='seek')  addSystemMsg(`⏩ ${myName} перемотал на ${fmtTime(value)}`);
+}
+
+function promptSeek(){
+  const t=prompt('На какое время перемотать?\nПример: 90 или 1:30');
+  if(t===null) return;
+  let sec;
+  if(t.includes(':')){const p=t.split(':');sec=parseInt(p[0])*60+parseInt(p[1]);}
+  else sec=parseFloat(t);
+  if(isNaN(sec)||sec<0) return;
+  syncCmd('seek',sec);
+}
+
+/* ═══ FORCE SYNC ═══ */
+function forceSyncNow(){
+  if(!currentImdbId){showNotif('⚠ Сначала выбери фильм');return;}
+
+  const t = lastKnownTime; // текущее время по нашему локальному таймеру
+  const wasPlaying = isPlaying;
+
+  const btn=document.getElementById('sync-now-btn');
+  btn.innerHTML='✓ Отправлено!';
+  setTimeout(()=>{btn.innerHTML=`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Синхр.`;},2000);
+
+  // Отправляем другу: перемотать на НАШЕ время, потом play
+  sendWS({type:'sync-force', name:myName, time:t, playing:wasPlaying});
+
+  // Себе тоже применяем seek чтобы выровняться
+  sendToPlayer('seek', t);
+  if(wasPlaying) setTimeout(()=>sendToPlayer('play'),300);
+
+  addSystemMsg(`🔄 Синхронизация отправлена — ${fmtTime(t)}`);
+  showSyncBadge();
+}
+
+/* ═══ SYNC BADGE ═══ */
+let syncTimeout;
+function showSyncBadge(){
+  const b=document.getElementById('sync-badge');
+  b.style.display='block';
+  clearTimeout(syncTimeout);
+  syncTimeout=setTimeout(()=>b.style.display='none',1800);
+}
+
+/* ═══ CHAT ═══ */
+function sendMessage(){
+  const inp=document.getElementById('chat-input');
+  const text=inp.value.trim();
+  if(!text) return;
+  inp.value='';
+  addMsg(myName,text,true);
+  sendWS({type:'chat',name:myName,text});
+}
+function addMsg(name,text,own){
+  const box=document.getElementById('messages');
+  const d=document.createElement('div');
+  d.className='msg'+(own?' own':'');
+  d.innerHTML=`<div class="msg-meta"><span class="msg-name ${own?'':'other'}">${esc(name)}</span><span class="msg-time">${nowStr()}</span></div><div class="bubble">${esc(text)}</div>`;
+  box.appendChild(d);box.scrollTop=box.scrollHeight;
+}
+function addSystemMsg(text){
+  const box=document.getElementById('messages');
+  const d=document.createElement('div');
+  d.className='msg system';
+  d.innerHTML=`<div class="bubble">${esc(text)}</div>`;
+  box.appendChild(d);box.scrollTop=box.scrollHeight;
+}
+
+/* ═══ COPY ROOM ═══ */
+function copyRoom(){
+  const link=location.origin+location.pathname+'?room='+roomId;
+  navigator.clipboard.writeText(link)
+    .then(()=>showNotif('✓ Ссылка скопирована!'))
+    .catch(()=>showNotif('Код: '+roomId));
+}
+</script>
