@@ -327,7 +327,7 @@ const PIESOCKET_API_KEY = 'W7ekjd4DUXNlhsQzrEM0wNxr2g4SA6XLizueGwS0';
 const PIESOCKET_CLUSTER = 'free.blr2';
 const TMDB_KEY = 'd91438da2171127b0545d5e6cd01f219';
 // ↓ Сюда вставь URL своего Cloudflare Worker после деплоя
-const WORKER_URL = 'https://lucky-hall-ebc2.redfool555.workers.dev';
+const WORKER_URL = 'https://tial-production.up.railway.app';
 
 /* ═══ STATE ═══ */
 let myName='', roomId='', psChannel=null;
@@ -619,7 +619,8 @@ async function fetchPlayers(imdbId, kpId){
     if (imdbId) params.set('imdb', imdbId);
     if (kpId)   params.set('kp', kpId);
     const r = await fetch(`${WORKER_URL}?${params}`);
-    cachedPlayerData = await r.json();
+    const json = await r.json();
+    cachedPlayerData = json.results || json; // сервер возвращает {results:{...}}
     renderVoiceBar(); // обновляем кнопки — теперь знаем что доступно
     // Если Alloha доступна — переключаем на неё автоматически
     if (cachedPlayerData.alloha) {
