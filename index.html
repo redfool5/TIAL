@@ -179,6 +179,19 @@
   </style>
 </head>
 <body>
+<div id="debug-log" style="position:fixed;bottom:0;left:0;right:0;background:rgba(255,0,0,0.9);color:#fff;font-size:11px;padding:4px 8px;z-index:9999;display:none;max-height:80px;overflow:auto;font-family:monospace"></div>
+<script>
+window.onerror = function(msg, src, line) {
+  var d = document.getElementById('debug-log');
+  d.style.display = 'block';
+  d.innerHTML += '<br>❌ ' + msg + ' (line ' + line + ')';
+};
+window.addEventListener('unhandledrejection', function(e) {
+  var d = document.getElementById('debug-log');
+  d.style.display = 'block';
+  d.innerHTML += '<br>⚠ ' + e.reason;
+});
+</script>
 
 <!-- ═══ JOIN OVERLAY ═══ -->
 <div id="overlay">
@@ -653,8 +666,6 @@ function loadPlayer(imdbId, playerIdx){
   document.getElementById('placeholder').style.display='none';
   document.getElementById('sync-controls').style.display='flex';
   document.getElementById('controls-row').style.display='flex';
-  // Начинаем слушать postMessage от плеера
-  startTimePoll();
 }
 
 function renderVoiceBar(){
@@ -696,22 +707,6 @@ function sendToPlayer(command, value){
       context:'player.js',version:'0.0.11',method:command,value:value??''
     }),'*');
   }catch(_){}
-}
-
-/* ═══ ТАЙМИНГ ═══ */
-let pollInterval=null;
-function startTimePoll(){
-  if(pollInterval) clearInterval(pollInterval);
-  pollInterval = setInterval(()=>{
-    const iframe=document.getElementById('player-iframe');
-    if(!iframe||!iframe.contentWindow) return;
-    try{
-      iframe.contentWindow.postMessage(JSON.stringify({
-        context:'player.js',version:'0.0.11',
-        method:'getCurrentTime',value:'',listener:'tl'
-      }),'*');
-    }catch(_){}
-  }, 1000);
 }
 
 function updateTime(sec){
