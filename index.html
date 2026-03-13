@@ -253,19 +253,19 @@ window.addEventListener('unhandledrejection', function(e) {
       <!-- overlay: badge + sync btn + bottom controls -->
       <!-- только значок синхронизации поверх плеера -->
       <div id="sync-badge">⟳ Синхронизация...</div>
-      <button id="sync-now-btn" onclick="forceSyncNow()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-        </svg>
-        Синхр.
-      </button>
     </div>
 
     <!-- ПАНЕЛЬ ПОД ПЛЕЕРОМ: кнопки + озвучки + now playing -->
     <div id="bottom-bar">
       <!-- строка управления -->
       <div id="controls-row">
+        <button id="sync-now-btn" onclick="forceSyncNow()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Синхр.
+          </button>
         <div class="sync-controls" id="sync-controls" style="display:none">
           <button class="sc-btn red" onclick="syncCmd('play')">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>PLAY
@@ -436,13 +436,19 @@ function handleMsg(d){
   if(d.type==='load-movie'){
     applyMovie(d.imdbId, d.kpId||'', d.title, d.year, d.poster);
     addSystemMsg(`🎬 ${d.name} включил: ${d.title}`);
+    // Тоже загружаем плееры для второго пользователя
+    fetchPlayers(d.imdbId, d.kpId||'');
   }
   if(d.type==='player-cmd'){
     showSyncBadge();
     isSyncing=true;
     if(d.cmd==='server') { 
       currentPlayerIdx=d.value;
-      if(currentImdbId) loadPlayer(currentImdbId, d.value);
+      if(!cachedPlayerData && currentImdbId) {
+        fetchPlayers(currentImdbId, currentKpId).then(()=>loadPlayer(currentImdbId, d.value));
+      } else if(currentImdbId) {
+        loadPlayer(currentImdbId, d.value);
+      }
       renderVoiceBar();
       isSyncing=false; return; 
     }
@@ -703,10 +709,17 @@ function sendToPlayer(command, value){
   const iframe=document.getElementById('player-iframe');
   if(!iframe||!iframe.contentWindow) return;
   try{
+    // EmbedMaster формат
     iframe.contentWindow.postMessage({source:'embedmaster_player_command',command,value},'*');
+    // PlayerJS формат (Alloha, большинство плееров)
     iframe.contentWindow.postMessage(JSON.stringify({
       context:'player.js',version:'0.0.11',method:command,value:value??''
     }),'*');
+    // Alloha нативный формат
+    const allohaCmd = command==='play'?'play':command==='pause'?'pause':command==='seek'?'seek':null;
+    if(allohaCmd) iframe.contentWindow.postMessage({
+      type: allohaCmd, value: value??0
+    },'*');
   }catch(_){}
 }
 
