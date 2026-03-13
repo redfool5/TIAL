@@ -624,6 +624,7 @@ function applyMovie(imdbId, kpId, title, year, poster){
   if(poster){npImg.src=poster;npImg.style.display='block';}else{npImg.style.display='none';}
 
   loadPlayer(imdbId, 1);
+  fetchPlayers(imdbId, currentKpId);
 }
 
 async function fetchPlayers(imdbId, kpId){
