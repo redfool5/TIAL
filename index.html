@@ -76,12 +76,10 @@
       padding:5px 10px;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:0.3px;
       display:none;align-items:center;gap:5px;
       backdrop-filter:blur(6px);
-      transition:background .2s,opacity .2s;
-      opacity:0;
+      transition:background .2s;
     }
     #sync-now-btn:hover{background:rgba(230,57,70,.7)}
     #sync-now-btn:active{opacity:.7}
-    .player-wrap:hover #sync-now-btn{display:flex;opacity:1}
 
     /* кнопки управления — вне плеера, под ним */
     .sync-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -461,9 +459,8 @@ function handleMsg(d){
   if(d.type==='sync-force'){
     showSyncBadge();
     isSyncing=true;
-    setLocalTime(d.time||0);
-    sendToPlayer('seek',d.time||0);
-    if(d.playing) setTimeout(()=>{startLocalTimer();sendToPlayer('play');},400);
+    reloadPlayerAtTime(d.time||0);
+    if(d.playing) setTimeout(()=>startLocalTimer(),500);
     else stopLocalTimer();
     addSystemMsg('🔄 '+d.name+' синхронизировал плеер — '+fmtTime(d.time||0));
     setTimeout(()=>isSyncing=false,600);
@@ -624,6 +621,8 @@ function applyMovie(imdbId, kpId, title, year, poster){
 
   document.getElementById('voice-bar').style.display='flex';
   document.getElementById('now-playing').style.display='flex';
+  document.getElementById('sync-now-btn').style.display='flex';
+  document.getElementById('sync-controls').style.display='flex';
   document.getElementById('np-title').textContent=title;
   document.getElementById('np-year').textContent=year;
   const npImg=document.getElementById('np-poster');
@@ -818,22 +817,34 @@ function promptSeek(){
 function forceSyncNow(){
   if(!currentImdbId){showNotif('⚠ Сначала выбери фильм');return;}
 
-  const t = lastKnownTime; // текущее время по нашему локальному таймеру
+  const t = lastKnownTime;
   const wasPlaying = isPlaying;
 
   const btn=document.getElementById('sync-now-btn');
-  btn.innerHTML='✓ Отправлено!';
+  btn.textContent='✓ Отправлено!';
   setTimeout(()=>{btn.innerHTML=`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Синхр.`;},2000);
 
-  // Отправляем другу: перемотать на НАШЕ время, потом play
+  // Отправляем другу
   sendWS({type:'sync-force', name:myName, time:t, playing:wasPlaying});
 
-  // Себе тоже применяем seek чтобы выровняться
-  sendToPlayer('seek', t);
-  if(wasPlaying) setTimeout(()=>sendToPlayer('play'),300);
+  // Себе перезагружаем плеер с временной меткой
+  reloadPlayerAtTime(t);
 
-  addSystemMsg(`🔄 Синхронизация отправлена — ${fmtTime(t)}`);
+  addSystemMsg(`🔄 Синхронизация — ${fmtTime(t)}`);
   showSyncBadge();
+}
+
+// Перезагрузить Alloha/любой плеер с нужной секунды
+function reloadPlayerAtTime(seconds){
+  if(!cachedPlayerData) return;
+  const iframe = document.getElementById('player-iframe');
+  let url = cachedPlayerData.alloha || cachedPlayerData.embedmaster;
+  if(!url) return;
+  // Alloha поддерживает ?t=секунды в URL
+  const sep = url.includes('?') ? '&' : '?';
+  iframe.src = url + sep + 't=' + Math.floor(seconds);
+  // Обновляем локальный таймер
+  setLocalTime(seconds);
 }
 
 /* ═══ SYNC BADGE ═══ */
