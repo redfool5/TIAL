@@ -641,13 +641,16 @@ async function fetchPlayers(imdbId, kpId){
     const r = await fetch(`${WORKER_URL}?${params}`);
     const json = await r.json();
     cachedPlayerData = json.results || json; // сервер возвращает {results:{...}}
-    renderVoiceBar(); // обновляем кнопки — теперь знаем что доступно
-    // Если Alloha доступна — переключаем на неё автоматически
+    // Если Alloha доступна — переключаем на неё (всегда, для обоих пользователей)
     if (cachedPlayerData.alloha) {
       currentPlayerIdx = 0;
-      renderVoiceBar();
-      const iframe = document.getElementById('player-iframe');
-      iframe.src = cachedPlayerData.alloha;
+    }
+    renderVoiceBar();
+    // Загружаем лучший доступный плеер
+    const iframe = document.getElementById('player-iframe');
+    const bestUrl = cachedPlayerData.alloha || cachedPlayerData.embedmaster || iframe.src;
+    if (bestUrl && bestUrl !== iframe.src) {
+      iframe.src = bestUrl;
     }
   } catch(e) {
     console.warn('Worker недоступен:', e);
